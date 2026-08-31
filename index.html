@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard de Investimentos | Visão Diretoria</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --border: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 20px; }
+
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    h1 { font-size: 1.5rem; font-weight: 600; color: var(--text); }
+    
+    .nav-filters { display: flex; gap: 8px; background: var(--card-bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
+    .btn-filter { background: transparent; border: none; color: var(--text-muted); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+    .btn-filter.active { background: var(--accent); color: #000; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .kpi-card { background: var(--card-bg); border: 1px solid var(--border); padding: 20px; border-radius: 12px; }
+    .kpi-card p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; }
+    .kpi-card h2 { font-size: 1.6rem; color: var(--text); }
+
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px; margin-bottom: 24px; }
+    .chart-card { background: var(--card-bg); border: 1px solid var(--border); padding: 20px; border-radius: 12px; height: 380px; display: flex; flex-direction: column; }
+    .chart-card h3 { font-size: 1rem; margin-bottom: 16px; color: var(--text-muted); }
+    .chart-wrapper { flex: 1; position: relative; width: 100%; height: 100%; }
+
+    .table-card { background: var(--card-bg); border: 1px solid var(--border); padding: 20px; border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+    th { color: var(--text-muted); padding: 12px; border-bottom: 1px solid var(--border); }
+    td { padding: 12px; border-bottom: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Visão Executiva da Carteira</h1>
+    <div class="nav-filters">
+      <button class="btn-filter active" onclick="filtrar('total')">Total Geral</button>
+      <button class="btn-filter" onclick="filtrar('Jan')">Jan</button>
+      <button class="btn-filter" onclick="filtrar('Fev')">Fev</button>
+      <button class="btn-filter" onclick="filtrar('Mar')">Mar</button>
+    </div>
+  </header>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <p>Patrimônio / Alocado</p>
+      <h2 id="kpi-total">R$ 0,00</h2>
+    </div>
+    <div class="kpi-card">
+      <p>Maior Ativo/Classe</p>
+      <h2 id="kpi-maior">-</h2>
+    </div>
+    <div class="kpi-card">
+      <p>Rendimento / Retorno Projetado</p>
+      <h2 id="kpi-retorno" style="color: #4ade80;">+0,0%</h2>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h3>Alocação por Categoria (Rosca)</h3>
+      <div class="chart-wrapper">
+        <canvas id="chartDoughnut"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Evolução do Aporte</h3>
+      <div class="chart-wrapper">
+        <canvas id="chartBar"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <h3 style="margin-bottom: 12px; color: var(--text-muted);">Detalhamento das Posições</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Ativo / Categoria</th>
+          <th>Mês</th>
+          <th>Valor Alocado</th>
+          <th>Participação</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // 1. BASE DE DADOS (Insira seus dados aqui)
+    const dados = [
+      { categoria: "Renda Fixa", mes: "Jan", valor: 150000 },
+      { categoria: "Ações", mes: "Jan", valor: 80000 },
+      { categoria: "Fundos Imobiliários", mes: "Jan", valor: 50000 },
+      { categoria: "Renda Fixa", mes: "Fev", valor: 160000 },
+      { categoria: "Ações", mes: "Fev", valor: 85000 },
+      { categoria: "Fundos Imobiliários", mes: "Fev", valor: 55000 },
+      { categoria: "Renda Fixa", mes: "Mar", valor: 170000 },
+      { categoria: "Ações", mes: "Mar", valor: 90000 },
+      { categoria: "Fundos Imobiliários", mes: "Mar", valor: 60000 }
+    ];
+
+    let chartDoughnut, chartBar;
+
+    function initCharts() {
+      const ctxDoughnut = document.getElementById('chartDoughnut').getContext('2d');
+      chartDoughnut = new Chart(ctxDoughnut, {
+        type: 'doughnut',
+        data: { labels: [], datasets: [{ data: [], backgroundColor: ['#38bdf8', '#818cf8', '#c084fc', '#f472b6'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#f8fafc' } } } }
+      });
+
+      const ctxBar = document.getElementById('chartBar').getContext('2d');
+      chartBar = new Chart(ctxBar, {
+        type: 'bar',
+        data: { labels: ['Jan', 'Fev', 'Mar'], datasets: [{ label: 'Aporte Total', data: [], backgroundColor: '#38bdf8' }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: '#94a3b8' } }, x: { ticks: { color: '#94a3b8' } } }, plugins: { legend: { display: false } } }
+      });
+    }
+
+    function filtrar(periodo) {
+      document.querySelectorAll('.btn-filter').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+
+      let dadosFiltrados = periodo === 'total' ? dados : dados.filter(d => d.mes === periodo);
+
+      // Consolidação para o Gráfico de Rosca
+      const categorias = {};
+      dadosFiltrados.forEach(item => {
+        categorias[item.categoria] = (categorias[item.categoria] || 0) + item.valor;
+      });
+
+      const labelsRosca = Object.keys(categorias);
+      const valoresRosca = Object.values(categorias);
+      const totalGeral = valoresRosca.reduce((a, b) => a + b, 0);
+
+      // Atualizar Rosca
+      chartDoughnut.data.labels = labelsRosca;
+      chartDoughnut.data.datasets[0].data = valoresRosca;
+      chartDoughnut.update();
+
+      // Atualizar Barras (Evolução Mensal)
+      const meses = ['Jan', 'Fev', 'Mar'];
+      const valoresMeses = meses.map(m => dados.filter(d => d.mes === m).reduce((a, b) => a + b.valor, 0));
+      chartBar.data.datasets[0].data = valoresMeses;
+      chartBar.update();
+
+      // Atualizar KPIs
+      document.getElementById('kpi-total').innerText = totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const maiorAtivo = labelsRosca[valoresRosca.indexOf(Math.max(...valoresRosca))] || '-';
+      document.getElementById('kpi-maior').innerText = maiorAtivo;
+      document.getElementById('kpi-retorno').innerText = "+12,4%";
+
+      // Atualizar Tabela
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+      dadosFiltrados.forEach(item => {
+        const share = ((item.valor / totalGeral) * 100).toFixed(1);
+        tbody.innerHTML += `
+          <tr>
+            <td>${item.categoria}</td>
+            <td>${item.mes}</td>
+            <td>${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td>${share}%</td>
+          </tr>
+        `;
+      });
+    }
+
+    window.onload = () => {
+      initCharts();
+      filtrar('total');
+    };
+  </script>
+</body>
+</html>
